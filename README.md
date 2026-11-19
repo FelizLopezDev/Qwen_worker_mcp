@@ -12,6 +12,18 @@ Permite que modelos frontera en la nube (Claude, Gemini, GPT) deleguen bloques p
   ollama pull qwen3:4b
   ```
 
+## Especificaciones de Hardware Recomendadas
+
+El rendimiento del worker local depende directamente de la **VRAM** (si tienes GPU dedicada) o de la **RAM unificada / del sistema** (Apple Silicon o ejecución en CPU). Para que la delegación sea más rápida que esperar al modelo en la nube, el modelo completo debe caber en memoria sin usar disco (*swap*).
+
+| Nivel | Modelo Sugerido (`OLLAMA_MODEL`) | RAM / VRAM Mínima | Peso en Disco | Perfil de Uso |
+| :--- | :--- | :--- | :--- | :--- |
+| **Ligero (Por defecto)** | `qwen3:4b` o `qwen2.5-coder:3b` | **8 GB RAM** (16 GB ideal en Windows) | ~2.5 GB | Laptops estándar sin GPU dedicada. Rápido para esquemas, tipos y funciones CRUD cortas. |
+| **Estándar (Recomendado)** | `qwen2.5-coder:7b` o `qwen3:8b` | **16 GB RAM** o **6–8 GB VRAM** | ~4.7 GB | Equipos con GPU dedicada (RTX 3060/4060) o Mac M1/M2/M3. Balance óptimo entre velocidad y precisión en tests. |
+| **Avanzado / Servidor** | `qwen2.5-coder:14b` o `32b` | **32 GB+ RAM** o **12–24 GB VRAM** | ~9–19 GB | Workstations o servidores internos de equipo. Alta precisión en refactorizaciones complejas. |
+
+> **Nota para usuarios en Windows:** Windows consume entre 4 GB y 6 GB de RAM en reposo. Si tu equipo tiene **8 GB de RAM totales**, cierra navegadores pesados antes de correr `ollama serve` y mantente en modelos de **3B a 4B parámetros** (`qwen3:4b`).
+
 ## Instalación rápida
 
 ### 1. Clonar el repositorio y crear el entorno virtual
@@ -64,4 +76,4 @@ Añade `local-qwen-worker` a la configuración MCP de tu herramienta (`~/.gemini
 ## Cómo funciona la delegación
 El skill incluye un **umbral de rentabilidad**:
 - **Bloques > 30 líneas:** El modelo Cloud delega esquemas Pydantic/SQL, endpoints CRUD completos o suites de tests (`pytest`/`Jest`) a `delegar_a_qwen` y luego audita sintaxis, tipos y seguridad.
-- **Micro-tareas (< 25 líneas):** El modelo Cloud las resuelve directamente para evitar latencia innecesaria.
+- **Micro-tareas (< 30 líneas):** El modelo Cloud las resuelve directamente para evitar latencia innecesaria.
