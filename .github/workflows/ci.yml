@@ -1,0 +1,17 @@
+name: CI - Qwen Worker MCP
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - run: ruff check qwen_worker.py audit_worker.py tests/
+      - run: pytest -v
