@@ -129,3 +129,5 @@ Qwen_worker_mcp/
 | `OLLAMA_AUDIT_MODEL` | `qwen2.5-coder:3b` | Modelo local usado por `audit_sensitive_file`. |
 | `OLLAMA_GENERATE_URL` | Endpoint local de Ollama | Ruta de generación de texto (configurable para contenedores o puertos personalizados). |
 | `LLM_API_URL` | Endpoint OpenAI-compatible local | Ruta para salidas JSON estructuradas en auditoría. |
+
+[![M8ven Score](https://m8ven.ai/badge/mcp/felizlopezdev-qwen-worker-mcp-x2ma8u?v=2ee9b5ac05dafae38908d2aa6f0fe2a1)](https://m8ven.ai/mcp/felizlopezdev-qwen-worker-mcp-x2ma8u?s=readme)
