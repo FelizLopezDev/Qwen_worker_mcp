@@ -8,7 +8,7 @@ Servidor **Model Context Protocol (MCP)** para arquitectura híbrida **Cloud + L
 
 * **Orquestador Cloud (Gemini / Claude):** Planificación, arquitectura y razonamiento complejo; recibe únicamente resúmenes agregados sanitizados.
 * **Servidor MCP Local (`qwen_worker.py` + `audit_worker.py`):** Expone las herramientas por `stdio`, aplica filtros de seguridad, valida sintaxis AST y gestiona carpetas aisladas.
-* **Motor Local (`Ollama` — `qwen2.5-coder:3b`):** Ejecuta generación de código y auditorías offline en `127.0.0.1:11434`.
+* **Motor Local (`Ollama` — `qwen2.5-coder:3b`):** Ejecuta generación de código y auditorías completamente offline en la máquina anfitriona.
 
 ---
 
