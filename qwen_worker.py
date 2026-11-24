@@ -1,4 +1,4 @@
-﻿import ast
+import ast
 import json
 import os
 import re
@@ -177,12 +177,15 @@ async def audit_sensitive_file(
     Lee exclusivamente desde ./sensitive_data/, escribe el reporte detallado con nombres/PII
     en ./reports/ (.docx o .txt) y devuelve a la nube únicamente métricas agregadas sanitizadas.
     """
-    return await run_airgapped_audit(
+    result_msg, p_tokens, c_tokens = await run_airgapped_audit(
         filename=filename,
         audit_instruction=audit_instruction,
         report_name=report_name,
         output_format=output_format,
+        return_usage=True,
     )
+    record_telemetry(prompt_tokens=p_tokens, completion_tokens=c_tokens, ast_passed=True)
+    return result_msg
 
 
 @mcp.tool()

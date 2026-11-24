@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import io
 import json
 import os
@@ -53,6 +53,45 @@ def resolve_report_output(report_name: str, fmt: Literal["docx", "txt"]) -> Path
     return target
 
 
+def _compute_csv_deterministic_stats(raw_rows: list[list[str]]) -> str:
+    """Precalcula sumas, promedios, mínimos y máximos exactos en Python para evitar alucinaciones aritméticas en modelos 3B."""
+    if len(raw_rows) < 2:
+        return ""
+    headers = [h.strip() for h in raw_rows[0]]
+    data_rows = raw_rows[1:]
+    total_records = len(data_rows)
+
+    numeric_cols: dict[str, list[float]] = {h: [] for h in headers}
+    for row in data_rows:
+        for idx, val in enumerate(row):
+            if idx >= len(headers):
+                continue
+            col_name = headers[idx]
+            # Ignorar columnas que parecen IDs o cédulas
+            if any(k in col_name.lower() for k in ("id", "cedula", "cédula", "telefono", "teléfono", "cuenta")):
+                continue
+            cleaned = re.sub(r"[^\d.-]", "", val.strip())
+            if cleaned and cleaned not in ("-", ".", "-."):
+                try:
+                    numeric_cols[col_name].append(float(cleaned))
+                except ValueError:
+                    pass
+
+    stats_lines = [
+        "=== ESTADÍSTICAS EXACTAS PRECALCULADAS POR PYTHON (USAR ESTOS VALORES LITERALES) ===",
+        f"- Total de registros (filas de datos): {total_records}",
+    ]
+    for col, values in numeric_cols.items():
+        if len(values) == total_records and values:
+            total_sum = sum(values)
+            avg_val = total_sum / len(values)
+            stats_lines.append(
+                f"- Columna '{col}': Suma exacta = {total_sum:,.2f} | Promedio exacto = {avg_val:,.2f} | Mínimo = {min(values):,.2f} | Máximo = {max(values):,.2f}"
+            )
+    stats_lines.append("=================================================================================")
+    return "\n".join(stats_lines)
+
+
 def read_sensitive_content(file_path: Path, max_chars: int = 24000) -> str:
     """Lee CSV, JSON, TXT o DOCX desde ./sensitive_data/ en texto estructurado."""
     suffix = file_path.suffix.lower()
@@ -60,8 +99,11 @@ def read_sensitive_content(file_path: Path, max_chars: int = 24000) -> str:
     if suffix == ".csv":
         raw = file_path.read_text(encoding="utf-8-sig", errors="replace")
         reader = csv.reader(io.StringIO(raw))
-        rows = [" | ".join(row) for row in reader if any(cell.strip() for cell in row)]
-        content = "\n".join(rows)
+        raw_rows = [row for row in reader if any(cell.strip() for cell in row)]
+        rows = [" | ".join(row) for row in raw_rows]
+        stats_header = _compute_csv_deterministic_stats(raw_rows)
+        body = "\n".join(rows)
+        content = f"{stats_header}\n\n{body}" if stats_header else body
     elif suffix == ".json":
         data = json.loads(file_path.read_text(encoding="utf-8", errors="replace"))
         content = json.dumps(data, ensure_ascii=False, indent=2)
@@ -176,10 +218,11 @@ async def run_airgapped_audit(
     audit_instruction: str,
     report_name: str = "",
     output_format: Literal["docx", "txt"] = "docx",
-) -> str:
+    return_usage: bool = False,
+) -> str | tuple[str, int, int]:
     """
     Ejecuta la auditoría 100% en local usando salida JSON estructurada:
-    1. Lee el archivo exclusivamente desde ./sensitive_data/.
+    1. Lee el archivo exclusivamente desde ./sensitive_data/ (con precálculo determinístico).
     2. Genera reporte detallado con PII en ./reports/ (.docx o .txt).
     3. Devuelve únicamente métricas agregadas sanitizadas con Regex.
     """
@@ -190,6 +233,8 @@ async def run_airgapped_audit(
 
     system_prompt = (
         "Eres un auditor de datos financieros operando en modo air-gapped. "
+        "Si el texto incluye un bloque de ESTADÍSTICAS EXACTAS PRECALCULADAS POR PYTHON, "
+        "debes usar esos valores numéricos exactos sin recalcularlos ni redondearlos distinto. "
         "Responde ÚNICAMENTE con un objeto JSON válido con exactamente estas dos claves de tipo string:\n"
         '1. "reporte_local": texto detallado en español claro (sin Markdown #, ** o `), '
         "incluyendo nombres completos, cédulas, montos y hallazgos específicos para gerencia.\n"
@@ -201,6 +246,9 @@ async def run_airgapped_audit(
         f"Instrucción de auditoría: {audit_instruction}\n\n"
         f"Datos del archivo ({input_path.name}):\n{sensitive_text}"
     )
+
+    prompt_tokens = 0
+    completion_tokens = 0
 
     async with httpx.AsyncClient(timeout=180.0) as client:
         response = await client.post(
@@ -219,11 +267,17 @@ async def run_airgapped_audit(
         )
         response.raise_for_status()
         data = response.json()
+        usage = data.get("usage") or {}
+        prompt_tokens = int(usage.get("prompt_tokens", len(user_prompt) // 4))
+        completion_tokens = int(usage.get("completion_tokens", 0))
+
         cleaned_json_text = (
             data["choices"][0]["message"]["content"]
             if "choices" in data
             else data.get("response", "")
         ).strip()
+        if not completion_tokens:
+            completion_tokens = max(1, len(cleaned_json_text) // 4)
 
     try:
         parsed = json.loads(cleaned_json_text)
@@ -251,9 +305,11 @@ async def run_airgapped_audit(
 
     safe_cloud_summary = sanitize_pii(clean_markdown_artifacts(cloud_section))
 
-    return (
+    result_msg = (
         f"Auditoría local completada (0 bytes de PII enviados a la nube).\n"
         f"Reporte detallado guardado localmente en: reports/{output_path.name}\n\n"
         f"Resumen agregado sanitizado:\n{safe_cloud_summary}"
     )
-
+    if return_usage:
+        return result_msg, prompt_tokens, completion_tokens
+    return result_msg
